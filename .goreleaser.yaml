@@ -53,11 +53,17 @@ nfpms:
   - archlinux
   - ipk
   # license: MIT
-
+  scripts:
+    postinstall: scripts/post-install.sh
+  contents:
+  - dst: /etc/profile.d/flatpak-alias-path.sh
+    type: config
+    src: scripts/flatpak-alias-path.sh
+    file_info:
+      mode: 644
 
 release:
   footer: >-
-    
     ---
 
     Released by [GoReleaser](https://github.com/goreleaser/goreleaser).
