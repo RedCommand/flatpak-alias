@@ -2,7 +2,9 @@
 
 A simple go application that generate aliases for flatpak applications
 
-![flatpak-alias](assets/flatpak-alias.gif)
+<!-- markdownlint-disable MD033 -->
+<img src="assets/flatpak-alias.gif" alt="demo gif">
+<!-- markdownlint-enable MD033 -->
 
 ## Installation
 
