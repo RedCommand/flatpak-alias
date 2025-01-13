@@ -62,7 +62,7 @@ Require echo
 Set Shell "bash"
 Set FontSize 32
 Set Width 1200
-Set Height 1500
+Set Height 800
 
 Type "echo 'Welcome to Flatpak Alias!'" Enter
 Sleep 500ms
