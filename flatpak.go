@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hbollon/go-edlib"
 	"github.com/rs/zerolog/log"
 	"gopkg.in/ini.v1"
 )
@@ -63,21 +62,10 @@ func getFlatpakApp(appID string) (Flatpak, error) {
 		return Flatpak{}, err
 	}
 
-	flatpak.Application.Command = strings.TrimSpace(flatpak.Application.Command)
-
-	rank := edlib.LevenshteinDistance(flatpak.Application.Command, appID)
-	if rank <= 0 {
-		if rank < 0 {
-			log.Warn().Str("appID", appID).Str("command", flatpak.Application.Command).Int("rank", rank).Msg("AppID and AppName do not match")
-		} else {
-			log.Debug().Str("appID", appID).Str("command", flatpak.Application.Command).Int("rank", rank).Msg("AppID and AppName are the same")
-		}
-		flatpak.Application.Command = strings.ToLower(appID[strings.LastIndex(appID, ".")+1:])
-	} else {
-		log.Debug().Str("appID", appID).Str("command", flatpak.Application.Command).Int("rank", rank).Msg("AppID and AppName match")
+	flatpak.Application.Command, err = getCommand(&flatpak)
+	if err != nil {
+		return Flatpak{}, err
 	}
-
-	flatpak.Application.Command = strings.ToLower(flatpak.Application.Command)
 
 	return flatpak, nil
 }
