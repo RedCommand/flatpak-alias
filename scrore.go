@@ -19,40 +19,46 @@ const (
 )
 
 func toCommand(str string) string {
-	res := make([]byte, len(str))
-	i := 0
+	res := make([]byte, 0, len(str))
 	needSpace := false
+	lastUpper := false
+	i := 0
 	for _, c := range str {
 		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
 			if needSpace {
-				res[i] = '-'
+				res = append(res, '-')
 				i++
 			}
-			res[i] = byte(c)
+			res = append(res, byte(c))
 			i++
 			needSpace = false
+			lastUpper = false
 		} else if c >= 'A' && c <= 'Z' {
-			res[i] = '-'
-			res[i+1] = byte(c - 'A' + 'a')
-			i += 2
-			needSpace = false
-		} else if c == '.' {
-			res[i] = '.'
+			if i > 0 && !lastUpper {
+				res = append(res, '-')
+				i++
+			}
+			res = append(res, byte(c-'A'+'a'))
 			i++
 			needSpace = false
-		} else {
+			lastUpper = true
+		} else if c == '.' {
+			res = append(res, '.')
+			i++
+			needSpace = false
+		} else if i > 0 {
 			needSpace = true
 		}
 	}
-	res = res[:i]
+	log.Trace().Str("input", str).Str("output", string(res)).Msg("Converted")
 	return string(res)
 }
 
 func getCommand(app *Flatpak) (string, error) {
 	var res string
 	var match string
-	command := strings.ToLower(strings.TrimSpace(app.Application.Command))
-	appID := strings.ToLower(strings.TrimSpace(app.Application.Name))
+	command := strings.TrimSpace(app.Application.Command)
+	appID := strings.TrimSpace(app.Application.Name)
 	name := appID[strings.LastIndex(appID, ".")+1:]
 
 	similarity, err := edlib.StringsSimilarity(command, name, algorithm)
