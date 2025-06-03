@@ -1,11 +1,11 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"strings"
 
 	"github.com/hbollon/go-edlib"
-	"github.com/rs/zerolog/log"
 )
 
 const threshold = 0.75
@@ -18,7 +18,7 @@ const (
 	matchNope = "nope"
 )
 
-func toCommand(str string) string {
+func toCommand(ctx context.Context, str string) string {
 	res := make([]byte, 0, len(str))
 	needSpace := false
 	lastUpper := false
@@ -50,11 +50,11 @@ func toCommand(str string) string {
 			needSpace = true
 		}
 	}
-	log.Trace().Str("input", str).Str("output", string(res)).Msg("Converted")
+	log.DebugContext(ctx, "Converted", "input", str, "output", string(res))
 	return string(res)
 }
 
-func getCommand(app *Flatpak) (string, error) {
+func getCommand(ctx context.Context, app *Flatpak) (string, error) {
 	var res string
 	var match string
 	command := strings.TrimSpace(app.Application.Command)
@@ -78,6 +78,6 @@ func getCommand(app *Flatpak) (string, error) {
 	if res == "" {
 		return "", errors.New("empty command")
 	}
-	log.Debug().Str("appID", appID).Str("name", name).Str("command", command).Float32("rank", similarity).Str("result", res).Msgf("Match %s", match)
-	return toCommand(res), nil
+	log.DebugContext(ctx, "Match", "appid", appID, "name", name, "command", command, "rank", similarity, "result", res, "match", match)
+	return toCommand(ctx, res), nil
 }

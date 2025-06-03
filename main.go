@@ -1,15 +1,15 @@
 package main
 
 import (
+	"context"
 	_ "embed"
 	"os"
 	"path"
 	"text/template"
 	"time"
 
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"gopkg.in/natefinch/lumberjack.v2"
+	"log/slog"
 )
 
 type Config struct {
@@ -27,6 +27,8 @@ type Flatpak struct {
 //go:embed script.gotmpl
 var scriptTemplateRaw string
 
+var log *slog.Logger
+
 func parseArgs() Config {
 	config := Config{}
 	if len(os.Args) > 1 {
@@ -37,7 +39,7 @@ func parseArgs() Config {
 	return config
 }
 
-func prepare(config *Config) (*template.Template, *lumberjack.Logger) {
+func prepare(ctx context.Context, config *Config) (*template.Template, *lumberjack.Logger) {
 	logFile := &lumberjack.Logger{
 		Filename:   path.Join(config.FlatpakDir, "flatpak-alias.log"), // Path to the log file
 		MaxSize:    1,                                                 // Maximum size in MB before rotation
@@ -46,36 +48,36 @@ func prepare(config *Config) (*template.Template, *lumberjack.Logger) {
 		Compress:   true,                                              // Compress rotated files
 	}
 
-	consoleWriter := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: time.RFC3339}
-
-	multiWriter := zerolog.MultiLevelWriter(consoleWriter, logFile)
-
-	log.Logger = zerolog.New(multiWriter).With().Timestamp().Logger()
-
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	textHandler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})
+	jsonHandler := slog.NewJSONHandler(logFile, &slog.HandlerOptions{Level: slog.LevelInfo})
+	log = slog.New(multiHandler{handlers: []slog.Handler{textHandler, jsonHandler}})
+	slog.SetDefault(log)
 
 	scriptTemplate, err := template.New("script").Parse(scriptTemplateRaw)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Error parsing template")
+		log.ErrorContext(ctx, "Error parsing template", "err", err)
+		os.Exit(1)
 	}
 
 	config.FlatpakDir = path.Join(config.FlatpakDir, "aliases")
-	log.Info().Str("path", config.FlatpakDir).Msg("Writing script")
+	log.InfoContext(ctx, "Writing script", "path", config.FlatpakDir)
 	err = os.MkdirAll(config.FlatpakDir, 0755)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Error creating directory")
+		log.ErrorContext(ctx, "Error creating directory", "err", err)
+		os.Exit(1)
 	}
 
 	return scriptTemplate, logFile
 }
 
 func main() {
+	ctx := context.Background()
 	config := parseArgs()
-	scriptTemplate, logFile := prepare(&config)
+	scriptTemplate, logFile := prepare(ctx, &config)
 	defer logFile.Close()
-	log.Info().Msg("Starting flatpak-alias")
-	log.Info().Str("path", config.FlatpakDir).Any("args", os.Args).Msg("Writing script")
-	apps := getAllFlatpakApps()
-	removeOldScripts(config)
-	generateScripts(apps, scriptTemplate, config)
+	log.InfoContext(ctx, "Starting flatpak-alias")
+	log.InfoContext(ctx, "Writing script", "path", config.FlatpakDir, "args", os.Args)
+	apps := getAllFlatpakApps(ctx)
+	removeOldScripts(ctx, config)
+	generateScripts(ctx, apps, scriptTemplate, config)
 }
