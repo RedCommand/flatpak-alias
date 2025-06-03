@@ -1,20 +1,21 @@
 package main
 
 import (
+	"context"
+	"os"
 	"os/exec"
 	"slices"
 	"strings"
 	"sync"
 
-	"github.com/rs/zerolog/log"
 	"gopkg.in/ini.v1"
 )
 
-func getApps() ([]string, error) {
+func getApps(ctx context.Context) ([]string, error) {
 	cmd := exec.Command("flatpak", "list", "--app")
 	cmd.Dir = "/var/lib/flatpak"
 
-	log.Debug().Str("command", cmd.Path+strings.Join(cmd.Args, " ")).Msg("Running command")
+	log.DebugContext(ctx, "Running command", "command", cmd.Path+" "+strings.Join(cmd.Args, " "))
 	out, err := cmd.Output()
 	if err != nil {
 		return nil, err
@@ -29,29 +30,29 @@ func getApps() ([]string, error) {
 		}
 		data := strings.Split(app, "\t")
 		if len(data) < 2 {
-			log.Warn().Msgf("Skipping line: %s", app)
+			log.WarnContext(ctx, "Skipping line", "line", app)
 			continue
 		}
 		appID := strings.TrimSpace(data[1])
 		if appID == "" {
 			continue
 		}
-		log.Trace().Msgf("AppID: %s", appID)
+		log.DebugContext(ctx, "AppID found", "appid", appID)
 		apps = append(apps, appID)
 	}
 	return apps, nil
 }
 
-func getFlatpakApp(appID string) (Flatpak, error) {
+func getFlatpakApp(ctx context.Context, appID string) (Flatpak, error) {
 	cmd := exec.Command("flatpak", "info", "-m", appID)
 
-	log.Debug().Str("command", cmd.Path+strings.Join(cmd.Args, " ")).Str("appID", appID).Msg("Running command")
+	log.DebugContext(ctx, "Running command", "command", cmd.Path+" "+strings.Join(cmd.Args, " "), "appid", appID)
 	out, err := cmd.Output()
 	if err != nil {
 		return Flatpak{}, err
 	}
 
-	log.Trace().Str("data", string(out)).Msg("Parsing toml")
+	log.DebugContext(ctx, "Parsing toml", "data", string(out))
 	var flatpak Flatpak
 	cfg, err := ini.Load(out)
 	if err != nil {
@@ -62,7 +63,7 @@ func getFlatpakApp(appID string) (Flatpak, error) {
 		return Flatpak{}, err
 	}
 
-	flatpak.Application.Command, err = getCommand(&flatpak)
+	flatpak.Application.Command, err = getCommand(ctx, &flatpak)
 	if err != nil {
 		return Flatpak{}, err
 	}
@@ -70,7 +71,7 @@ func getFlatpakApp(appID string) (Flatpak, error) {
 	return flatpak, nil
 }
 
-func removeDuplicates(apps []Flatpak) []Flatpak {
+func removeDuplicates(ctx context.Context, apps []Flatpak) []Flatpak {
 	keys := make(map[string]*Flatpak)
 	list := []Flatpak{}
 	duplicates := make(map[string][]Flatpak)
@@ -89,35 +90,36 @@ func removeDuplicates(apps []Flatpak) []Flatpak {
 	return slices.DeleteFunc(list, func(app Flatpak) bool {
 		apps, ok := duplicates[app.Application.Command]
 		if ok {
-			log.Warn().Str("command", app.Application.Command).Interface("apps", apps).Msg("Found duplicates")
+			log.WarnContext(ctx, "Found duplicates", "command", app.Application.Command, "apps", apps)
 		}
 		return ok
 	})
 }
 
-func getAllFlatpakApps() []Flatpak {
-	appsID, err := getApps()
+func getAllFlatpakApps(ctx context.Context) []Flatpak {
+	appsID, err := getApps(ctx)
 	if err != nil {
-		log.Fatal().Err(err).Msg("Error getting apps")
+		log.ErrorContext(ctx, "Error getting apps", "err", err)
+		os.Exit(1)
 	}
 
 	apps := make([]Flatpak, len(appsID))
 	wg := sync.WaitGroup{}
 	for i, appID := range appsID {
 		wg.Add(1)
-		go func(appID string) {
+		go func(i int, appID string) {
 			defer wg.Done()
-			app, err := getFlatpakApp(appID)
+			app, err := getFlatpakApp(ctx, appID)
 			if err != nil {
-				log.Error().Err(err).Str("appID", appID).Msg("Error getting app")
+				log.ErrorContext(ctx, "Error getting app", "err", err, "appid", appID)
 			}
 			// No need to lock since we are writing to different indexes
 			apps[i] = app
-		}(appID)
+		}(i, appID)
 	}
 	wg.Wait()
 
-	apps = removeDuplicates(apps)
+	apps = removeDuplicates(ctx, apps)
 
 	return apps
 }
